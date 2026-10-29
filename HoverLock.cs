@@ -8,7 +8,7 @@ namespace mistermcd.HelicopterAltitudeFix
 {
     public class HelicopterAltitudeFixMod : IUserMod
     {
-        public string Name => "Helicopter Water Altitude Floor";
+        public string Name => "HoverLock";
         public string Description => "Prevents helicopters from dipping below their cruising altitude when crossing water.";
 
         private const string HarmonyId = "com.mistermcd.cities.helicopteraltitudefloor";
