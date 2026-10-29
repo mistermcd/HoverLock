@@ -9,7 +9,7 @@ namespace mistermcd.HelicopterAltitudeFix
     public class HelicopterAltitudeFixMod : IUserMod
     {
         public string Name => "Helicopter Water Altitude Floor";
-        public string Description => "Prevents helicopters from dipping below their last known land height when crossing water.";
+        public string Description => "Prevents helicopters from dipping below their cruising altitude when crossing water.";
 
         private const string HarmonyId = "com.mistermcd.cities.helicopteraltitudefloor";
         private Harmony _harmony;
@@ -48,64 +48,50 @@ namespace mistermcd.HelicopterAltitudeFix
     [HarmonyPatch("SimulationStep", new Type[] { typeof(ushort), typeof(Vehicle), typeof(Vehicle.Frame), typeof(uint) })]
     public static class HelicopterAISimulationStepPatch
     {
-        private static readonly Dictionary<ushort, float> _lastOverLandAltitudes = new Dictionary<ushort, float>(256);
+        // Tracks the established cruising altitude floor for each active helicopter
+        private static readonly Dictionary<ushort, float> _cruisingAltitudes = new Dictionary<ushort, float>(256);
 
         public static void Cleanup()
         {
-            _lastOverLandAltitudes.Clear();
+            _cruisingAltitudes.Clear();
         }
 
         public static void Postfix(ushort vehicleID, ref Vehicle data, ref Vehicle.Frame frameData, uint lodPhysics)
         {
             try
             {
+                // If the helicopter is landing, taking off, or deleted, clear tracking so normal vertical operations work
                 const Vehicle.Flags invalidFlags = Vehicle.Flags.Landing | Vehicle.Flags.TakingOff | Vehicle.Flags.Deleted;
                 if ((data.m_flags & invalidFlags) != 0 || (data.m_flags & Vehicle.Flags.Created) == 0)
                 {
-                    if (_lastOverLandAltitudes.ContainsKey(vehicleID))
+                    if (_cruisingAltitudes.ContainsKey(vehicleID))
                     {
-                        _lastOverLandAltitudes.Remove(vehicleID);
+                        _cruisingAltitudes.Remove(vehicleID);
                     }
                     return;
                 }
 
                 Vector3 position = frameData.m_position;
 
-                // Cast a ray straight down from the helicopter to see what surface it is flying over
-                // Layer mask can target water or terrain, or we can check raycast hit tag/layer.
-                bool isOverWater = false;
-                RaycastHit hit;
-                // Raycast downward 500 meters from current position
-                if (Physics.Raycast(position + Vector3.up * 10f, Vector3.down, out hit, 500f))
+                // If we don't have a recorded cruising altitude for this copter yet, initialize it
+                if (!_cruisingAltitudes.TryGetValue(vehicleID, out float cruisingAlt))
                 {
-                    // Check if the hit object belongs to water layer or has a water indicator name
-                    string colliderName = hit.collider.gameObject.name.ToLower();
-                    if (colliderName.Contains("water") || hit.collider.gameObject.layer == LayerMask.NameToLayer("Water"))
-                    {
-                        isOverWater = true;
-                    }
+                    _cruisingAltitudes[vehicleID] = position.y;
+                    return;
                 }
 
-                if (!isOverWater)
+                // If the helicopter is climbing (e.g., avoiding an obstacle or shore structure), 
+                // update our cruising altitude floor to match its new higher elevation.
+                if (position.y > cruisingAlt)
                 {
-                    // Over land: Update and save current flight altitude
-                    _lastOverLandAltitudes[vehicleID] = position.y;
+                    _cruisingAltitudes[vehicleID] = position.y;
                 }
-                else
+                else if (position.y < cruisingAlt)
                 {
-                    // Over water: Enforce minimum altitude floor based on the last known land height
-                    if (_lastOverLandAltitudes.TryGetValue(vehicleID, out float minAltitude))
-                    {
-                        if (position.y < minAltitude)
-                        {
-                            position.y = minAltitude;
-                            frameData.m_position = position;
-                        }
-                    }
-                    else
-                    {
-                        _lastOverLandAltitudes[vehicleID] = position.y;
-                    }
+                    // If the game tries to force it downward (the water-dip bug), 
+                    // clamp it so it stays locked at its established cruising height.
+                    position.y = cruisingAlt;
+                    frameData.m_position = position;
                 }
             }
             catch (Exception ex)
