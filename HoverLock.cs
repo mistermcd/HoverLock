@@ -9,7 +9,7 @@ namespace mistermcd.HelicopterAltitudeFix
     public class HelicopterAltitudeFixMod : IUserMod
     {
         public string Name => "HoverLock";
-        public string Description => "Prevents helicopters from dipping below their cruising altitude when crossing water.";
+        public string Description => "Prevents Scuba-Copters!";
 
         private const string HarmonyId = "com.mistermcd.cities.helicopteraltitudefloor";
         private Harmony _harmony;
@@ -44,54 +44,83 @@ namespace mistermcd.HelicopterAltitudeFix
         }
     }
 
+    // State container for each individual helicopter instance
+    public class CopterFlightState
+    {
+        public float FloorAltitude = 0f;
+        public bool IsCruising = false;
+        public bool WasTakingOff = false;
+    }
+
     [HarmonyPatch(typeof(HelicopterAI))]
     [HarmonyPatch("SimulationStep", new Type[] { typeof(ushort), typeof(Vehicle), typeof(Vehicle.Frame), typeof(uint) })]
     public static class HelicopterAISimulationStepPatch
     {
-        // Tracks the established cruising altitude floor for each active helicopter
-        private static readonly Dictionary<ushort, float> _cruisingAltitudes = new Dictionary<ushort, float>(256);
+        private static readonly Dictionary<ushort, CopterFlightState> _copterStates = new Dictionary<ushort, CopterFlightState>(256);
 
         public static void Cleanup()
         {
-            _cruisingAltitudes.Clear();
+            _copterStates.Clear();
         }
 
         public static void Postfix(ushort vehicleID, ref Vehicle data, ref Vehicle.Frame frameData, uint lodPhysics)
         {
             try
             {
-                // If the helicopter is landing, taking off, or deleted, clear tracking so normal vertical operations work
-                const Vehicle.Flags invalidFlags = Vehicle.Flags.Landing | Vehicle.Flags.TakingOff | Vehicle.Flags.Deleted;
+                // If landing, deleted, or not created, clear state so normal ground/pad operations work
+                const Vehicle.Flags invalidFlags = Vehicle.Flags.Landing | Vehicle.Flags.Deleted;
                 if ((data.m_flags & invalidFlags) != 0 || (data.m_flags & Vehicle.Flags.Created) == 0)
                 {
-                    if (_cruisingAltitudes.ContainsKey(vehicleID))
+                    if (_copterStates.ContainsKey(vehicleID))
                     {
-                        _cruisingAltitudes.Remove(vehicleID);
+                        _copterStates.Remove(vehicleID);
                     }
                     return;
                 }
 
                 Vector3 position = frameData.m_position;
 
-                // If we don't have a recorded cruising altitude for this copter yet, initialize it
-                if (!_cruisingAltitudes.TryGetValue(vehicleID, out float cruisingAlt))
+                // Get or create state tracker for this specific helicopter
+                if (!_copterStates.TryGetValue(vehicleID, out var state))
                 {
-                    _cruisingAltitudes[vehicleID] = position.y;
-                    return;
+                    state = new CopterFlightState();
+                    _copterStates[vehicleID] = state;
                 }
 
-                // If the helicopter is climbing (e.g., avoiding an obstacle or shore structure), 
-                // update our cruising altitude floor to match its new higher elevation.
-                if (position.y > cruisingAlt)
+                bool isTakingOff = (data.m_flags & Vehicle.Flags.TakingOff) != 0;
+
+                if (isTakingOff)
                 {
-                    _cruisingAltitudes[vehicleID] = position.y;
+                    // While taking off, continuously update the baseline height as it ascends
+                    state.FloorAltitude = position.y;
+                    state.IsCruising = false;
+                    state.WasTakingOff = true;
                 }
-                else if (position.y < cruisingAlt)
+                else
                 {
-                    // If the game tries to force it downward (the water-dip bug), 
-                    // clamp it so it stays locked at its established cruising height.
-                    position.y = cruisingAlt;
-                    frameData.m_position = position;
+                    // Check if we just transitioned out of takeoff into cruise flight
+                    if (state.WasTakingOff && !state.IsCruising)
+                    {
+                        // THIS IS THE EXACT MOMENT: Takeoff complete, cruising begins!
+                        // Lock the floor altitude right here.
+                        state.FloorAltitude = position.y;
+                        state.IsCruising = true;
+                        state.WasTakingOff = false;
+                    }
+                    else if (!state.IsCruising)
+                    {
+                        // Fallback if it spawned directly in mid-air
+                        state.FloorAltitude = position.y;
+                        state.IsCruising = true;
+                    }
+
+                    // We are in cruise flight!
+                    // Enforce the floor: never go below FloorAltitude, but allow rising above it for obstacles.
+                    if (position.y < state.FloorAltitude)
+                    {
+                        position.y = state.FloorAltitude;
+                        frameData.m_position = position;
+                    }
                 }
             }
             catch (Exception ex)
