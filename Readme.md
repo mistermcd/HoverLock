@@ -10,7 +10,7 @@ In *Cities: Skylines*, helicopters love hugging the contours of the ground. That
 
 ### 🛠️ How It Works
 
-- **Cruise Altitude Floor:** The helicopters will not dip below the altitude they began cruise flight at.The instant a helicopter enters cruise flight, **HoverLock** locks this as the minimum flight altitude.
+- **Cruise Altitude Floor:** The helicopters will not dip below the altitude they began cruise flight at. The instant a helicopter enters cruise flight, **HoverLock** locks this as the minimum flight altitude.
 
 - **Smooth Ocean Transit:** Choppers sail smoothly across bays, rivers, and oceans at the exact height they were flying over land.
 
