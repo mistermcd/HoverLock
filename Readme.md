@@ -30,6 +30,6 @@ In *Cities: Skylines*, helicopters love hugging the contours of the ground. That
 
 This is my first published mod, and yes I used AI to help me code it. The idea is all mine though after watching countless helicopters become submarines, or kamikaze into the side of ships, I figured it was time to try and do something about it!
 
-Code is on 
+Code is on [GitHub](https://github.com/mistermcd/HoverLock)
 
 - McD
