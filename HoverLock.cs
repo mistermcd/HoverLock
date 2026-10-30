@@ -20,11 +20,11 @@ namespace mistermcd.HelicopterAltitudeFix
             {
                 _harmony = new Harmony(HarmonyId);
                 _harmony.PatchAll(typeof(HelicopterAltitudeFixMod).Assembly);
-                Debug.Log("[HelicopterAltitudeFix] Successfully applied Harmony patches.");
+                Debug.Log("[HoverLock] Successfully applied Harmony patches.");
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[HelicopterAltitudeFix] Failed to apply Harmony patches: {ex.Message}");
+                Debug.LogError($"[HoverLock] Failed to apply Harmony patches: {ex.Message}");
             }
         }
 
@@ -35,11 +35,11 @@ namespace mistermcd.HelicopterAltitudeFix
                 _harmony?.UnpatchAll(HarmonyId);
                 _harmony = null;
                 HelicopterAISimulationStepPatch.Cleanup();
-                Debug.Log("[HelicopterAltitudeFix] Successfully unpatched Harmony.");
+                Debug.Log("[HoverLock] Successfully unpatched Harmony.");
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[HelicopterAltitudeFix] Error during unpatching: {ex.Message}");
+                Debug.LogError($"[HoverLock] Error during unpatching: {ex.Message}");
             }
         }
     }
@@ -125,7 +125,7 @@ namespace mistermcd.HelicopterAltitudeFix
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"[HelicopterAltitudeFix] Exception during SimulationStep for vehicle {vehicleID}: {ex.Message}");
+                Debug.LogWarning($"[HoverLock] Exception during SimulationStep for vehicle {vehicleID}: {ex.Message}");
             }
         }
     }
