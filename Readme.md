@@ -10,11 +10,11 @@ In *Cities: Skylines*, helicopters love hugging the contours of the ground. That
 
 ### 🛠️ How It Works
 
-- **Coastline Detection:** The instant a helicopter crosses from land to water, **HoverLock** freezes its flight altitude.
+- **Cruise Altitude Floor:** The helicopters will not dip below the altitude they began cruise flight at.The instant a helicopter enters cruise flight, **HoverLock** locks this as the minimum flight altitude.
 
 - **Smooth Ocean Transit:** Choppers sail smoothly across bays, rivers, and oceans at the exact height they were flying over land.
 
-- **Seamless Hand-off:** As soon as solid ground is back under their rotors, default terrain-following control kicks right back in.
+- **Seamless Hand-off:** Default terrain-following control kicks right back in if the helicopter is approaching an obstacle.
 
 ### ⚡ Performance & Compatibility
 
@@ -24,7 +24,7 @@ In *Cities: Skylines*, helicopters love hugging the contours of the ground. That
 
 - **Harmony 2.2.2.0 Powered:** Built for total stability and seamless mod co-existence.
 
-*Say goodbye to amphibious choppers and keep your pilots in the sky where they belong!*
+*Say goodbye to scuba choppers and keep your pilots in the sky where they belong!*
 
 This is my first published mod, and yes I used AI to help me code it. The idea is all mine though after watching countless helicopters become submarines, or kamikaze into the side of ships, I figured it was time to try and do something about it!
 
