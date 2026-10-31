@@ -28,7 +28,17 @@ In *Cities: Skylines*, helicopters love hugging the contours of the ground. That
 
 *Say goodbye to scuba choppers and keep your pilots in the sky where they belong!*
 
-This is my first published mod, and yes I used AI to help me code it. The idea is all mine though after watching countless helicopters become submarines, or kamikaze into the side of ships, I figured it was time to try and do something about it!
+This is my first published mod, and yes I used AI to help me code it. 
+The idea is all mine though after watching countless helicopters become scubacopters,
+I figured it was time to try and do something about it!
+
+I made this mod primarily to solve a problem in a large coastal city. Passenger / Cargo helicopters crossing large expanses of deep water
+between stops would lower in altitude close to, and sometimes into, the water. This mod fixes that.
+
+I have also tested it in mountain terrain. Taking off from valley stops, crossing water and climbing to a mountain stop, all good.
+Taking off from a mountain stop and going to a valley stop across water, the altitude on the return trip remains high until landing.
+Taking off from a valley stop, climbing over mountainous terrain, and landing in valley stop normal game mechanics apply. 
+
 
 Code is on [GitHub](https://github.com/mistermcd/HoverLock)
 
