@@ -2,12 +2,13 @@
 // October 2026 - Idea and testing by MisterMcD, coding by Gemini.
 // Patches PassengerHelicopterAI and CargoHelicopterAI SimulationStep methods
 
+using ColossalFramework;
+using HarmonyLib;
+using ICities;
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-using HarmonyLib;
 using UnityEngine;
-using ICities;
 
 namespace HoverLock
 {
@@ -64,8 +65,7 @@ namespace HoverLock
                 return;
             }
 
-            // Target Passenger copters
-            string[] targetClassNames = { "PassengerHelicopterAI","CargoHelicopterAI" };  // add HelicopterAI class here for service helicopters.
+            string[] targetClassNames = { "PassengerHelicopterAI", "CargoHelicopterAI" };
             int patchedCount = 0;
 
             foreach (string className in targetClassNames)
@@ -167,9 +167,33 @@ namespace HoverLock
                     return;
                 }
 
+                // Sample terrain height to determine if we are in low terrain/water vs high mountains
+                bool allowRatchet = true;
+                try
+                {
+                    if (Singleton<TerrainManager>.exists)
+                    {
+                        float terrainHeight = TerrainManager.instance.SampleDetailHeight(pos);
+                        // If flying over high mountains (above 75m terrain elevation), disable upward ratcheting 
+                        // so floorAlt doesn't get locked to mountain peaks.
+                        if (terrainHeight >= 75f)
+                        {
+                            allowRatchet = false;
+                        }
+                    }
+                }
+                catch
+                {
+                    // Fallback if manager isn't ready
+                }
+
                 if (pos.y > floorAlt)
                 {
-                    _altitudes[vehicleID] = pos.y; // Dynamically allow climbing for high coastal terrain or buildings
+                    if (allowRatchet)
+                    {
+                        _altitudes[vehicleID] = pos.y; // Dynamically capture cruise altitude climb in low terrain/ocean
+                    }
+                    // Over mountains, allow climbing freely without updating floorAlt upward!
                 }
                 else if (pos.y < floorAlt)
                 {
