@@ -1,6 +1,6 @@
-﻿// HoverLock - A mod for Cities: Skylines that prevents helicopters from descending below their takeoff altitude.
+﻿// HoverLock - A mod for Cities: Skylines that prevents passenger and cargo helicopters from descending below their takeoff altitude.
 // October 2026 - Idea and testing by MisterMcD, coding by Gemini.
-// Patches PassengerHelicopterAI and CargoHelicopterAI SimulationStep methods
+// Patches PassengerHelicopterAI and HelicopterAI (for Cargo) with strict transport filtering.
 
 using ColossalFramework;
 using HarmonyLib;
@@ -15,7 +15,7 @@ namespace HoverLock
     public class ModEntry : IUserMod
     {
         public string Name => "HoverLock";
-        public string Description => "Prevents those pesky scuba-copters!";
+        public string Description => "Prevents passenger and cargo scuba-copters over water while allowing free flight in mountains.";
     }
 
     public class HoverLockLoadingExtension : LoadingExtensionBase
@@ -65,44 +65,57 @@ namespace HoverLock
                 return;
             }
 
-            string[] targetClassNames = { "PassengerHelicopterAI", "CargoHelicopterAI" };
             int patchedCount = 0;
 
-            foreach (string className in targetClassNames)
+            // 1. Patch PassengerHelicopterAI (implements its own SimulationStep)
+            Type passengerAiType = AccessTools.TypeByName("PassengerHelicopterAI");
+            if (!ReferenceEquals(passengerAiType, null))
             {
-                Type aiType = AccessTools.TypeByName(className);
-                if (ReferenceEquals(aiType, null))
-                {
-                    Debug.Log($"[HoverLock] Note: Type '{className}' not found in this game instance. Skipping.");
-                    continue;
-                }
-
-                MethodInfo originalMethod = null;
-                foreach (var method in aiType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
-                {
-                    if (method.Name == "SimulationStep")
+                MethodInfo passengerMethod = AccessTools.Method(
+                    passengerAiType,
+                    "SimulationStep",
+                    new Type[]
                     {
-                        var parameters = method.GetParameters();
-                        if (parameters.Length >= 3 &&
-                            ReferenceEquals(parameters[0].ParameterType, typeof(ushort)) &&
-                            parameters[1].ParameterType.Name.Contains("Vehicle") &&
-                            parameters[2].ParameterType.Name.Contains("Frame"))
-                        {
-                            originalMethod = method;
-                            break;
-                        }
+                        typeof(ushort),
+                        typeof(Vehicle).MakeByRefType(),
+                        typeof(Vehicle.Frame).MakeByRefType(),
+                        typeof(ushort),
+                        typeof(Vehicle).MakeByRefType(),
+                        typeof(int)
                     }
-                }
+                );
 
-                if (!ReferenceEquals(originalMethod, null))
+                if (!ReferenceEquals(passengerMethod, null))
                 {
-                    _harmony.Patch(originalMethod, postfix: new HarmonyMethod(postfixMethod));
+                    _harmony.Patch(passengerMethod, postfix: new HarmonyMethod(postfixMethod));
                     patchedCount++;
-                    Debug.Log($"[HoverLock] SUCCESS: Successfully patched {className}.SimulationStep!");
+                    Debug.Log("[HoverLock] SUCCESS: Successfully patched PassengerHelicopterAI.SimulationStep!");
                 }
-                else
+            }
+
+            // 2. Patch HelicopterAI (base class for CargoHelicopterAI and emergency copters)
+            Type baseAiType = AccessTools.TypeByName("HelicopterAI");
+            if (!ReferenceEquals(baseAiType, null))
+            {
+                MethodInfo baseMethod = AccessTools.Method(
+                    baseAiType,
+                    "SimulationStep",
+                    new Type[]
+                    {
+                        typeof(ushort),
+                        typeof(Vehicle).MakeByRefType(),
+                        typeof(Vehicle.Frame).MakeByRefType(),
+                        typeof(ushort),
+                        typeof(Vehicle).MakeByRefType(),
+                        typeof(int)
+                    }
+                );
+
+                if (!ReferenceEquals(baseMethod, null))
                 {
-                    Debug.LogWarning($"[HoverLock] Warning: Could not find matching SimulationStep overload on {className}.");
+                    _harmony.Patch(baseMethod, postfix: new HarmonyMethod(postfixMethod));
+                    patchedCount++;
+                    Debug.Log("[HoverLock] SUCCESS: Successfully patched HelicopterAI.SimulationStep!");
                 }
             }
 
@@ -142,6 +155,16 @@ namespace HoverLock
         {
             try
             {
+                // STRICT TRANSPORT FILTER: Only process Passenger and Cargo helicopters.
+                // Emergency/service choppers (Police, Fire, Medical, Disaster) are safely ignored.
+                if (vehicleData.Info == null || vehicleData.Info.m_vehicleAI == null) return;
+
+                string aiTypeName = vehicleData.Info.m_vehicleAI.GetType().Name;
+                if (aiTypeName == null || (!aiTypeName.Contains("PassengerHelicopterAI") && !aiTypeName.Contains("CargoHelicopterAI")))
+                {
+                    return;
+                }
+
                 const Vehicle.Flags invalidFlags = Vehicle.Flags.Landing | Vehicle.Flags.Deleted;
                 if ((vehicleData.m_flags & invalidFlags) != 0 || (vehicleData.m_flags & Vehicle.Flags.Created) == 0)
                 {
@@ -167,15 +190,13 @@ namespace HoverLock
                     return;
                 }
 
-                // Sample terrain height to determine if we are in low terrain/water vs high mountains
+                // Sample terrain height to handle mountainous terrain check (75m threshold)
                 bool allowRatchet = true;
                 try
                 {
                     if (Singleton<TerrainManager>.exists)
                     {
                         float terrainHeight = TerrainManager.instance.SampleDetailHeight(pos);
-                        // If flying over high mountains (above 75m terrain elevation), disable upward ratcheting 
-                        // so floorAlt doesn't get locked to mountain peaks.
                         if (terrainHeight >= 75f)
                         {
                             allowRatchet = false;
@@ -193,14 +214,14 @@ namespace HoverLock
                     {
                         _altitudes[vehicleID] = pos.y; // Dynamically capture cruise altitude climb in low terrain/ocean
                     }
-                    // Over mountains, allow climbing freely without updating floorAlt upward!
+                    // Over mountains (>= 75m), allow climbing freely without updating floorAlt upward
                 }
                 else if (pos.y < floorAlt)
                 {
                     pos.y = floorAlt;
                     frameData.m_position = pos;
 
-                    // Stop downward velocity from fighting the floor clamp (eliminates bouncing and speed loss)
+                    // Stop downward velocity from fighting the floor clamp (prevents bouncing/speed loss)
                     if (frameData.m_velocity.y < 0f)
                     {
                         frameData.m_velocity.y = 0f;
