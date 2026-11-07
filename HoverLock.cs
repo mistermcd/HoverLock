@@ -83,10 +83,11 @@ namespace HoverLock
                     if (method.Name == "SimulationStep")
                     {
                         var parameters = method.GetParameters();
-                        if (parameters.Length >= 3 &&
-                            ReferenceEquals(parameters[0].ParameterType, typeof(ushort)) &&
-                            parameters[1].ParameterType.Name.Contains("Vehicle") &&
-                            parameters[2].ParameterType.Name.Contains("Frame"))
+                        // Target the exact 6-parameter SimulationStep signature specified by Harmony
+                        if (parameters.Length == 6 &&
+                            parameters[0].ParameterType == typeof(ushort) &&
+                            parameters[3].ParameterType == typeof(ushort) &&
+                            parameters[5].ParameterType == typeof(int))
                         {
                             originalMethod = method;
                             break;
@@ -102,7 +103,7 @@ namespace HoverLock
                 }
                 else
                 {
-                    Debug.LogWarning($"[HoverLock] Warning: Could not find matching SimulationStep overload on {className}.");
+                    Debug.LogWarning($"[HoverLock] Warning: Could not find matching 6-parameter SimulationStep overload on {className}.");
                 }
             }
 
@@ -167,15 +168,13 @@ namespace HoverLock
                     return;
                 }
 
-                // Sample terrain height to determine if we are in low terrain/water vs high mountains
+                // Sample terrain height to determine if we are in low terrain/water vs high mountains (75m threshold)
                 bool allowRatchet = true;
                 try
                 {
                     if (Singleton<TerrainManager>.exists)
                     {
                         float terrainHeight = TerrainManager.instance.SampleDetailHeight(pos);
-                        // If flying over high mountains (above 75m terrain elevation), disable upward ratcheting 
-                        // so floorAlt doesn't get locked to mountain peaks.
                         if (terrainHeight >= 75f)
                         {
                             allowRatchet = false;
@@ -193,14 +192,14 @@ namespace HoverLock
                     {
                         _altitudes[vehicleID] = pos.y; // Dynamically capture cruise altitude climb in low terrain/ocean
                     }
-                    // Over mountains, allow climbing freely without updating floorAlt upward!
+                    // Over mountains (>= 75m), allow climbing freely without updating floorAlt upward
                 }
                 else if (pos.y < floorAlt)
                 {
                     pos.y = floorAlt;
                     frameData.m_position = pos;
 
-                    // Stop downward velocity from fighting the floor clamp (eliminates bouncing and speed loss)
+                    // Stop downward velocity from fighting the floor clamp
                     if (frameData.m_velocity.y < 0f)
                     {
                         frameData.m_velocity.y = 0f;
